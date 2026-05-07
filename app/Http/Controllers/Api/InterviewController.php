@@ -123,9 +123,10 @@ class InterviewController extends Controller
         try {
             Mail::to($email)->send(new InterviewInviteMail($invite, $interview));
             $invite->update(['invite_status' => 1, 'invited_on' => now()]);
-        } catch (\Exception $e) {
-            $invite->update(['invite_status' => 2]);
-        }
+   } catch (\Exception $e) {
+    $invite->update(['invite_status' => 2]);
+    \Log::error('Interview mail failed: ' . $e->getMessage());
+}
     }
 
     return $this->out(null, 1, 'Invites created.');
