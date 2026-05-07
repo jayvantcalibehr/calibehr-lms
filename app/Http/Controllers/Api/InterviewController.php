@@ -343,4 +343,153 @@ class InterviewController extends Controller
         return $this->out($data, 1, 'OK');
     }
 
+    // =========================================================================
+    // PUBLIC METHODS — Invite-based interview (no auth required)
+    // =========================================================================
+
+    /**
+     * GET /api/interview-take/{uniqueId}
+     * Recipient opens email link — load interview details + questions
+     */
+    public function publicGetInterview($uniqueId)
+    {
+        $invite = InterviewInvite::where('unique_id', $uniqueId)->first();
+        if (!$invite) {
+            return $this->out(null, 0, 'Invalid invite link.');
+        }
+
+        // Already completed?
+        if ($invite->completed == 2) {
+            return $this->out(['status' => 'completed', 'completed_on' => $invite->complete_on], 2, 'You have already completed this interview.');
+        }
+
+        // Expired?
+        if ($invite->expire_on && now()->gt($invite->expire_on)) {
+            return $this->out(null, 0, 'This invite link has expired.');
+        }
+
+        $interview = Interview::find($invite->interview_id);
+        if (!$interview || $interview->status != 1) {
+            return $this->out(null, 0, 'Interview not found or unavailable.');
+        }
+
+        $questions = InterviewQuestion::where('interview_id', $invite->interview_id)
+            ->where('status', 1)
+            ->orderBy('id')
+            ->get(['id', 'question_text', 'question_time', 'question_view_time']);
+
+        return $this->out([
+            'invite_id'   => $invite->id,
+            'unique_id'   => $invite->unique_id,
+            'email'       => $invite->email,
+            'started_on'  => $invite->started_on,
+            'completed'   => $invite->completed,
+            'interview'   => [
+                'id'          => $interview->id,
+                'name'        => $interview->name,
+                'description' => $interview->description,
+                'time'        => $interview->time,
+            ],
+            'questions'   => $questions,
+        ], 1, 'OK');
+    }
+
+    /**
+     * POST /api/interview-take/{uniqueId}/start
+     * Mark invite as started + create response rows
+     */
+    public function publicStartInterview($uniqueId)
+    {
+        $invite = InterviewInvite::where('unique_id', $uniqueId)->first();
+        if (!$invite) return $this->out(null, 0, 'Invalid invite link.');
+        if ($invite->completed == 2) return $this->out(null, 0, 'Already completed.');
+        if ($invite->expire_on && now()->gt($invite->expire_on)) return $this->out(null, 0, 'Link expired.');
+
+        // Mark started
+        if ($invite->completed == 0) {
+            $invite->update([
+                'completed'  => 1,
+                'started_on' => now(),
+            ]);
+        }
+
+        // Pre-create response rows for each question (idempotent)
+        $questions = InterviewQuestion::where('interview_id', $invite->interview_id)
+            ->where('status', 1)->pluck('id');
+
+        foreach ($questions as $qid) {
+            InterviewResponse::firstOrCreate(
+                ['invite_id' => $invite->id, 'question_id' => $qid],
+                ['interview_id' => $invite->interview_id, 'started_on' => now(), 'submitted' => 0]
+            );
+        }
+
+        return $this->out(['started_on' => $invite->started_on ?? now()], 1, 'Started.');
+    }
+
+    /**
+     * POST /api/interview-take/{uniqueId}/submit-video
+     * Upload one question's video answer to S3 + save src
+     */
+    public function publicSubmitVideo(Request $request, $uniqueId)
+    {
+        $request->validate([
+            'questionID' => 'required|integer',
+            'video'      => 'required|file|mimes:mp4,webm,mov,avi|max:102400', // 100MB max
+        ]);
+
+        $invite = InterviewInvite::where('unique_id', $uniqueId)->first();
+        if (!$invite) return $this->out(null, 0, 'Invalid invite link.');
+        if ($invite->completed == 2) return $this->out(null, 0, 'Already completed.');
+        if ($invite->expire_on && now()->gt($invite->expire_on)) return $this->out(null, 0, 'Link expired.');
+
+        // Get/create response
+        $response = InterviewResponse::firstOrCreate(
+            ['invite_id' => $invite->id, 'question_id' => $request->questionID],
+            ['interview_id' => $invite->interview_id, 'started_on' => now(), 'submitted' => 0]
+        );
+
+        // Upload to S3
+        $file = $request->file('video');
+        $ext  = $file->getClientOriginalExtension() ?: 'mp4';
+        $path = "interview/{$invite->interview_id}/{$invite->id}/{$request->questionID}/" . time() . "_response.{$ext}";
+
+        try {
+            \Illuminate\Support\Facades\Storage::disk('s3')->put($path, file_get_contents($file), 'public');
+            $url = config('filesystems.disks.s3.url') . '/' . $path;
+        } catch (\Exception $e) {
+            return $this->out(null, 0, 'Video upload failed. Please try again.');
+        }
+
+        // Save video record
+        InterviewResponseVideo::create([
+            'response_id' => $response->id,
+            'src'         => $url,
+            'added_on'    => now(),
+        ]);
+
+        // Mark response submitted
+        $response->update(['submitted' => 1, 'submitted_on' => now()]);
+
+        return $this->out(['video_url' => $url], 1, 'Video saved.');
+    }
+
+    /**
+     * POST /api/interview-take/{uniqueId}/complete
+     * Mark interview fully completed
+     */
+    public function publicCompleteInterview($uniqueId)
+    {
+        $invite = InterviewInvite::where('unique_id', $uniqueId)->first();
+        if (!$invite) return $this->out(null, 0, 'Invalid invite link.');
+        if ($invite->completed == 2) return $this->out(null, 0, 'Already completed.');
+
+        $invite->update([
+            'completed'   => 2,
+            'complete_on' => now(),
+        ]);
+
+        return $this->out(['completed_on' => $invite->complete_on], 1, 'Interview completed. Thank you!');
+    }
+
 }

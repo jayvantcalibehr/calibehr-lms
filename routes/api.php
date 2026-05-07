@@ -295,6 +295,11 @@ Route::middleware(['auth:sanctum', CheckLmsAuth::class])->group(function () {
     Route::get('reports/matrix/courses/excel', [ReportController::class, 'downloadMatrixReportExcel']);
     Route::get('reports/matrix/pdf',           [ReportController::class, 'downloadMatrixReportPdf']);
 
+    // --- Feedback Report ---
+    Route::get('reports/feedback',       [ReportController::class, 'getFeedbackReport']);
+    Route::get('reports/feedback/excel', [ReportController::class, 'downloadFeedbackReportExcel']);
+    Route::get('reports/feedback/pdf',   [ReportController::class, 'downloadFeedbackReportPdf']);
+
 
     // --- File Uploads ---
     Route::post('upload/category-image', [UploadController::class, 'uploadCategoryImage']);
@@ -311,9 +316,7 @@ Route::middleware(['auth:sanctum', CheckLmsAuth::class])->group(function () {
     Route::post('notifications/new-course', [NotificationController::class, 'newCourseNotification']);
     Route::post('notifications/course-assigned', [NotificationController::class, 'courseAssignedNotification']);
 // --- Feedback Report ---
-Route::get('reports/feedback',       [ReportController::class, 'getFeedbackReport']);
-Route::get('reports/feedback/excel', [ReportController::class, 'downloadFeedbackReportExcel']);
-Route::get('reports/feedback/pdf',   [ReportController::class, 'downloadFeedbackReportPdf']);
+
 
 // --- Department Leaderboard ---
 Route::get('leaderboard/department', [CourseController::class, 'getDepartmentLeaderboard']);
