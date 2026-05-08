@@ -358,69 +358,82 @@ class ReportController extends Controller
     // LEARNER REPORT — JSON data
     // =========================================================================
 
-    /** GET /api/reports/learner?userID= */
+    /** GET /api/reports/learner?companyCode[]=&department[]= */
     public function getLearnerReport(Request $request)
     {
-        $request->validate(['userID' => 'required|integer']);
-        $user     = User::findOrFail($request->userID);
-        $learners = CourseLearner::where('learner_id', $request->userID)->where('status', 1)->get()
-            ->map(function ($l) {
-                $course = Course::find($l->course_id);
-                return [
-                    'course'       => $course ? $course->name : '',
-                    'enrolled_on'  => $l->added_on    ? date('d-m-Y', strtotime($l->added_on))    : '',
-                    'started_on'   => $l->started_on  ? date('d-m-Y', strtotime($l->started_on))  : '',
-                    'completed'    => $l->completed   ? 'Yes' : 'No',
-                    'completed_on' => $l->completed_on? date('d-m-Y', strtotime($l->completed_on)): '',
-                ];
-            });
+        $companies   = $this->parseList($request, 'companyCode');
+        $departments = $this->parseList($request, 'department');
 
-        return $this->out([
-            'emp_code'  => $user->emp_code,
-            'name'      => $user->full_name,
-            'email'     => $user->emp_email,
-            'total'     => count($learners),
-            'completed' => $learners->where('completed', 'Yes')->count(),
-            'pending'   => $learners->where('completed', 'No')->count(),
-            'courses'   => $learners,
-        ], 1, 'OK');
+        $query = User::query();
+        if (!empty($companies))   $query->whereIn('emp_client', $companies);
+        if (!empty($departments)) $query->whereIn('emp_department', $departments);
+        $users = $query->get();
+
+        $report = $users->map(function ($user) {
+            $enrollments = CourseLearner::where('learner_id', $user->id)->where('status', 1)->get();
+            return [
+                'emp_code'    => $user->emp_code,
+                'name'        => $user->full_name,
+                'email'       => $user->emp_email,
+                'department'  => $user->emp_department,
+                'designation' => $user->emp_designation,
+                'assigned'    => $enrollments->count(),
+                'completed'   => $enrollments->where('completed', 1)->count(),
+                'pending'     => $enrollments->where('completed', 0)->count(),
+            ];
+        });
+
+        return $this->out(['total' => $report->count(), 'report' => $report], 1, 'OK');
     }
 
     // =========================================================================
     // LEARNER REPORT — Excel Download
     // =========================================================================
 
-    /** GET /api/reports/learner/excel?userID= */
+    /** GET /api/reports/learner/excel?companyCode[]=&department[]= */
     public function downloadLearnerReportExcel(Request $request)
     {
-        $request->validate(['userID' => 'required|integer']);
-        $user     = User::findOrFail($request->userID);
-        $learners = CourseLearner::where('learner_id', $request->userID)->where('status', 1)->get();
+        $companies   = $this->parseList($request, 'companyCode');
+        $departments = $this->parseList($request, 'department');
 
-        $data = $learners->map(function ($l) {
-            $course = Course::find($l->course_id);
-            return [
-                'Course'       => $course ? $course->name : '',
-                'Enrolled On'  => $l->added_on    ? date('d-m-Y', strtotime($l->added_on))    : '',
-                'Started On'   => $l->started_on  ? date('d-m-Y', strtotime($l->started_on))  : '',
-                'Completed'    => $l->completed   ? 'Yes' : 'No',
-                'Completed On' => $l->completed_on? date('d-m-Y', strtotime($l->completed_on)): '',
-            ];
-        })->toArray();
+        $query = User::query();
+        if (!empty($companies))   $query->whereIn('emp_client', $companies);
+        if (!empty($departments)) $query->whereIn('emp_department', $departments);
+        $users = $query->orderBy('emp_code')->get();
 
-        $filename = 'Learner_Report_'.$user->emp_code.'_'.date('d-m-Y').'.xlsx';
+        $data = [];
+        foreach ($users as $user) {
+            $learners = CourseLearner::where('learner_id', $user->id)->where('status', 1)->get();
+            foreach ($learners as $l) {
+                $course   = Course::find($l->course_id);
+                $data[] = [
+                    'Emp Code'    => $user->emp_code,
+                    'Name'        => $user->full_name,
+                    'Email'       => $user->emp_email,
+                    'Department'  => $user->emp_department  ?? '',
+                    'Designation' => $user->emp_designation ?? '',
+                    'Course'      => $course ? $course->name : '',
+                    'Enrolled On' => $l->added_on    ? date('d-m-Y', strtotime($l->added_on))    : '',
+                    'Started On'  => $l->started_on  ? date('d-m-Y', strtotime($l->started_on))  : '',
+                    'Completed'   => $l->completed   ? 'Yes' : 'No',
+                    'Completed On'=> $l->completed_on? date('d-m-Y', strtotime($l->completed_on)): '',
+                ];
+            }
+        }
 
-        return Excel::download(new class($data, $user->full_name, $user->emp_code) implements FromArray, WithColumnWidths, WithHeadings, WithStyles, WithTitle
+        $filename = 'Learner_Report_'.date('d-m-Y').'.xlsx';
+
+        return Excel::download(new class($data) implements FromArray, WithColumnWidths, WithHeadings, WithStyles, WithTitle
         {
-            private $data; private $name; private $empCode;
-            public function __construct($data, $name, $empCode) { $this->data = $data; $this->name = $name; $this->empCode = $empCode; }
+            private $data;
+            public function __construct($data) { $this->data = $data; }
             public function array(): array { return $this->data; }
-            public function headings(): array { return ['Course', 'Enrolled On', 'Started On', 'Completed', 'Completed On']; }
+            public function headings(): array { return ['Emp Code','Name','Email','Department','Designation','Course','Enrolled On','Started On','Completed','Completed On']; }
             public function title(): string { return 'Learner Report'; }
             public function styles(Worksheet $sheet) {
                 return [1 => ['font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']], 'fill' => ['fillType' => 'solid', 'startColor' => ['rgb' => '1F4E79']]]];
             }
-            public function columnWidths(): array { return ['A' => 45, 'B' => 15, 'C' => 15, 'D' => 12, 'E' => 15]; }
+            public function columnWidths(): array { return ['A'=>12,'B'=>25,'C'=>30,'D'=>18,'E'=>20,'F'=>40,'G'=>15,'H'=>15,'I'=>12,'J'=>15]; }
         }, $filename);
     }
 
@@ -428,65 +441,70 @@ class ReportController extends Controller
     // LEARNER REPORT — PDF Download
     // =========================================================================
 
-    /** GET /api/reports/learner/pdf?userID= */
+    /** GET /api/reports/learner/pdf?companyCode[]=&department[]= */
     public function downloadLearnerReportPdf(Request $request)
     {
         ini_set('max_execution_time', 300);
         set_time_limit(300);
-        $request->validate(['userID' => 'required|integer']);
 
-        $user     = User::findOrFail($request->userID);
-        $learners = CourseLearner::where('learner_id', $request->userID)->where('status', 1)->get()
-            ->map(function ($l) {
+        $companies   = $this->parseList($request, 'companyCode');
+        $departments = $this->parseList($request, 'department');
+
+        $query = User::query();
+        if (!empty($companies))   $query->whereIn('emp_client', $companies);
+        if (!empty($departments)) $query->whereIn('emp_department', $departments);
+        $users = $query->orderBy('emp_code')->limit(500)->get();
+
+        $total = 0; $completed = 0; $pending = 0; $rows = '';
+
+        foreach ($users as $user) {
+            $learners = CourseLearner::where('learner_id', $user->id)->where('status', 1)->get();
+            foreach ($learners as $l) {
                 $course = Course::find($l->course_id);
-                return [
-                    'course'       => $course ? $course->name : '',
-                    'enrolled_on'  => $l->added_on    ? date('d-m-Y', strtotime($l->added_on))    : '',
-                    'started_on'   => $l->started_on  ? date('d-m-Y', strtotime($l->started_on))  : '',
-                    'completed'    => $l->completed   ? 'Yes' : 'No',
-                    'completed_on' => $l->completed_on? date('d-m-Y', strtotime($l->completed_on)): '',
-                ];
-            });
-
-        $total     = count($learners);
-        $completed = $learners->where('completed', 'Yes')->count();
-        $pending   = $learners->where('completed', 'No')->count();
+                $total++;
+                $isDone = $l->completed ? 'Yes' : 'No';
+                if ($l->completed) $completed++; else $pending++;
+                $class = $l->completed ? 'yes' : 'no';
+                $rows .= '<tr>
+                    <td>'.htmlspecialchars($user->emp_code).'</td>
+                    <td>'.htmlspecialchars($user->full_name).'</td>
+                    <td>'.htmlspecialchars($user->emp_department ?? '').'</td>
+                    <td>'.htmlspecialchars($course ? $course->name : '').'</td>
+                    <td>'.($l->added_on    ? date('d-m-Y', strtotime($l->added_on))    : '').'</td>
+                    <td>'.($l->started_on  ? date('d-m-Y', strtotime($l->started_on))  : '').'</td>
+                    <td class="'.$class.'">'.$isDone.'</td>
+                    <td>'.($l->completed_on? date('d-m-Y', strtotime($l->completed_on)): '').'</td>
+                </tr>';
+            }
+        }
 
         $html = '<style>
-        body{font-family:Arial,sans-serif;font-size:11px}h2{color:#1F4E79;text-align:center}
-        .info{margin-bottom:10px}.info span{margin-right:20px;font-weight:bold}
+        body{font-family:Arial,sans-serif;font-size:10px}h2{color:#1F4E79;text-align:center}
         .summary{margin-bottom:15px;background:#f0f4f8;padding:10px;border-radius:5px}
         .summary span{margin-right:20px;font-weight:bold}
         table{width:100%;border-collapse:collapse;margin-top:10px}
-        th{background:#1F4E79;color:white;padding:7px;text-align:left;font-size:10px}
-        td{padding:6px;border-bottom:1px solid #ddd;font-size:10px}
+        th{background:#1F4E79;color:white;padding:7px;text-align:left;font-size:9px}
+        td{padding:5px;border-bottom:1px solid #ddd;font-size:9px}
         tr:nth-child(even){background:#f9f9f9}
         .yes{color:green;font-weight:bold}.no{color:red}
         .footer{text-align:center;margin-top:20px;color:#888;font-size:9px}
         </style>
         <h2>Learner Report</h2>
-        <div class="info">
-            <span>Name: '.$user->full_name.'</span>
-            <span>Emp Code: '.$user->emp_code.'</span>
-            <span>Email: '.$user->emp_email.'</span>
-        </div>
         <div class="summary">
-            <span>Total Courses: '.$total.'</span>
+            <span>Total Learners: '.count($users).'</span>
+            <span>Total Enrollments: '.$total.'</span>
             <span>Completed: '.$completed.'</span>
             <span>Pending: '.$pending.'</span>
             <span>Generated: '.date('d-m-Y H:i').'</span>
         </div>
-        <table><tr><th>Course</th><th>Enrolled On</th><th>Started On</th><th>Completed</th><th>Completed On</th></tr>';
-
-        foreach ($learners as $l) {
-            $class = $l['completed'] === 'Yes' ? 'yes' : 'no';
-            $html .= '<tr><td>'.$l['course'].'</td><td>'.$l['enrolled_on'].'</td><td>'.$l['started_on'].'</td>
-                <td class="'.$class.'">'.$l['completed'].'</td><td>'.$l['completed_on'].'</td></tr>';
-        }
-        $html .= '</table><div class="footer">Calibehr LMS — Confidential Report</div>';
+        <table>
+            <tr><th>Emp Code</th><th>Name</th><th>Department</th><th>Course</th><th>Enrolled On</th><th>Started On</th><th>Completed</th><th>Completed On</th></tr>
+            '.$rows.'
+        </table>
+        <div class="footer">Calibehr LMS — Confidential Report</div>';
 
         $pdf      = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
-        $filename = 'Learner_Report_'.$user->emp_code.'_'.date('d-m-Y').'.pdf';
+        $filename = 'Learner_Report_'.date('d-m-Y').'.pdf';
         return $pdf->download($filename);
     }
 
