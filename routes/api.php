@@ -319,6 +319,6 @@ Route::middleware(['auth:sanctum', CheckLmsAuth::class])->group(function () {
 
 
 // --- Department Leaderboard ---
-Route::get('leaderboard/department', [CourseController::class, 'getDepartmentLeaderboard']);
+    Route::get('leaderboard/department', [CourseController::class, 'getDepartmentLeaderboard']);
 
 });
