@@ -605,40 +605,39 @@ public function getCourseList(Request $request)
     }
 
     /** GET /api/courses/my-courses-inprogress */
-    public function getMyCoursesInprogress(Request $request)
-    {
-        $uid = $this->userId($request);
-        $learners = CourseLearner::with('course')
-            ->where('learner_id', $uid)
-            ->where('status', 1)
-            ->whereNotNull('started_on')
-            ->get();
+ public function getMyCoursesInprogress(Request $request)
+{
+    $uid = $this->userId($request);
+    $learners = CourseLearner::with('course')
+        ->where('learner_id', $uid)
+        ->where('status', 1)
+        ->get();
 
-        $data = $learners->map(function ($l) {
-            $totalTopics     = CourseTopic::where('course_id', $l->course_id)->where('status', 1)->count();
-            $completedTopics = CourseLearnerTopicStatus::where('course_id', $l->course_id)
-                ->where('user_id', $l->learner_id)->where('completed', 1)->count();
-            $progress = $totalTopics > 0 ? round(($completedTopics / $totalTopics) * 100) : 0;
+    $data = $learners->map(function ($l) {
+        $totalTopics     = CourseTopic::where('course_id', $l->course_id)->where('status', 1)->count();
+        $completedTopics = CourseLearnerTopicStatus::where('course_id', $l->course_id)
+            ->where('user_id', $l->learner_id)->where('completed', 1)->count();
+        $progress = $totalTopics > 0 ? round(($completedTopics / $totalTopics) * 100) : 0;
 
-            return [
-                'id'                  => $l->course_id,                                    // course.id for frontend (was learner.id — caused 404s)
-                'enrollment_id'       => $l->id,                                           // kept for backward compat
-                'course_id'           => $l->course_id,
-                'name'                => $l->course ? $l->course->name : '',               // frontend reads course.name
-                'course_name'         => $l->course ? $l->course->name : '',
-                'description'         => $l->course ? $l->course->description : '',
-                'image_url'           => $l->course ? $l->course->image_url : '',
-                'completed'           => $l->completed,
-                'progress_percentage' => $l->completed ? 100 : $progress,
-                'started_on'          => $l->started_on,
-                'completed_on'        => $l->completed_on,
-                'learner_id'          => $l->learner_id,
-                'enrolled'            => true,
-            ];
-        });
+        return [
+            'id'                  => $l->course_id,
+            'enrollment_id'       => $l->id,
+            'course_id'           => $l->course_id,
+            'name'                => $l->course ? $l->course->name : '',
+            'course_name'         => $l->course ? $l->course->name : '',
+            'description'         => $l->course ? $l->course->description : '',
+            'image_url'           => $l->course ? $l->course->image_url : '',
+            'completed'           => $l->completed,
+            'progress_percentage' => $l->completed ? 100 : $progress,
+            'started_on'          => $l->started_on,
+            'completed_on'        => $l->completed_on,
+            'learner_id'          => $l->learner_id,
+            'enrolled'            => true,
+        ];
+    });
 
-        return $this->out($data, 1, 'OK');
-    }
+    return $this->out($data, 1, 'OK');
+}
 
     // =========================================================================
     // LEADERBOARD
