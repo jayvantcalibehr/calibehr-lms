@@ -621,21 +621,24 @@ $learners = CourseLearner::with('course')
             ->where('user_id', $l->learner_id)->where('completed', 1)->count();
         $progress = $totalTopics > 0 ? round(($completedTopics / $totalTopics) * 100) : 0;
 
-        return [
-            'id'                  => $l->course_id,
-            'enrollment_id'       => $l->id,
-            'course_id'           => $l->course_id,
-            'name'                => $l->course ? $l->course->name : '',
-            'course_name'         => $l->course ? $l->course->name : '',
-            'description'         => $l->course ? $l->course->description : '',
-            'image_url'           => $l->course ? $l->course->image_url : '',
-            'completed'           => $l->completed,
-            'progress_percentage' => $l->completed ? 100 : $progress,
-            'started_on'          => $l->started_on,
-            'completed_on'        => $l->completed_on,
-            'learner_id'          => $l->learner_id,
-            'enrolled'            => true,
-        ];
+  return [
+    'id'                  => $l->course_id,
+    'enrollment_id'       => $l->id,
+    'course_id'           => $l->course_id,
+    'name'                => $l->course ? $l->course->name : '',
+    'course_name'         => $l->course ? $l->course->name : '',
+    'description'         => $l->course ? $l->course->description : '',
+    'image_url'           => $l->course ? $l->course->image_url : '',
+    'completed'           => $l->completed,
+    'progress_percentage' => $l->completed ? 100 : $progress,
+    'started_on'          => $l->started_on,
+    'completed_on'        => $l->completed_on,
+    'learner_id'          => $l->learner_id,
+    'enrolled'            => true,
+    // ← Add these two lines:
+    'learner_count'       => \App\Models\CourseLearner::where('course_id', $l->course_id)->where('status', 1)->count(),
+    'rating'              => \App\Models\CourseFeedbackRating::where('course_id', $l->course_id)->avg('rating'),
+];
     });
 
     return $this->out($data, 1, 'OK');
