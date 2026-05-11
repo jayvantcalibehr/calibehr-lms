@@ -817,7 +817,7 @@ public function getCourseList(Request $request)
             'done_on'    => now(),
         ]);
     }
-    public function getDepartmentLeaderboard(Request $request)
+public function getDepartmentLeaderboard(Request $request)
 {
     $data = \App\Models\User::select(
             'emp_department',
@@ -833,6 +833,35 @@ public function getCourseList(Request $request)
         ->orderByDesc('total_points')
         ->limit(20)
         ->get();
+
+    try {
+        $serverName = env('ECR_SQLSRV_HOST', 'tcp:172.16.1.30,1433');
+        $config = [
+            'Database'               => env('ECR_SQLSRV_DB', 'ECR_New'),
+            'Uid'                    => env('ECR_SQLSRV_USER', 'nbg_sa'),
+            'PWD'                    => env('ECR_SQLSRV_PASS', ''),
+            'TrustServerCertificate' => true,
+            'LoginTimeout'           => 5,
+        ];
+        $conn = @sqlsrv_connect($serverName, $config);
+        if ($conn) {
+            $sql  = 'SELECT ID, DeptName FROM [ECR_New].[dbo].[Department]';
+            $stmt = sqlsrv_query($conn, $sql);
+            $deptMap = [];
+            if ($stmt) {
+                while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+                    $deptMap[(string)$row['ID']] = $row['DeptName'];
+                }
+            }
+            sqlsrv_close($conn);
+            $data = $data->map(function ($d) use ($deptMap) {
+                $d->dept_name = $deptMap[(string)$d->emp_department] ?? 'Dept ' . $d->emp_department;
+                return $d;
+            });
+        }
+    } catch (\Throwable $e) {
+        // ECR unreachable — fallback to Dept ID
+    }
 
     return $this->out($data, 1, 'OK');
 }
