@@ -612,7 +612,8 @@ $learners = CourseLearner::with('course')
     ->where('learner_id', $uid)
     ->where('status', 1)
     ->get()
-    ->unique('course_id');
+    ->unique('course_id')
+    ->values();
 
     $data = $learners->map(function ($l) {
         $totalTopics     = CourseTopic::where('course_id', $l->course_id)->where('status', 1)->count();
