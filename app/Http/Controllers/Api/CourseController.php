@@ -608,10 +608,11 @@ public function getCourseList(Request $request)
  public function getMyCoursesInprogress(Request $request)
 {
     $uid = $this->userId($request);
-    $learners = CourseLearner::with('course')
-        ->where('learner_id', $uid)
-        ->where('status', 1)
-        ->get();
+$learners = CourseLearner::with('course')
+    ->where('learner_id', $uid)
+    ->where('status', 1)
+    ->get()
+    ->unique('course_id');
 
     $data = $learners->map(function ($l) {
         $totalTopics     = CourseTopic::where('course_id', $l->course_id)->where('status', 1)->count();
