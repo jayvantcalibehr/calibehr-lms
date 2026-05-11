@@ -99,16 +99,17 @@ class CourseController extends Controller
     // =========================================================================
 
     /** GET /api/courses/list  — admin/trainer course management list */
-    public function getCourseList(Request $request)
-    {
-        $courses = Course::with('category')
-            ->where('status', '!=', 0)
-            ->orderByDesc('added_on')
-            ->get()
-            ->map(fn($c) => $this->formatCourse($c));
-        return $this->out($courses, 1, 'OK');
-    }
-
+public function getCourseList(Request $request)
+{
+    $courses = Course::with('category')
+        ->orderByDesc('added_on')
+        ->get()
+        ->map(fn($c) => $this->formatCourse($c));
+    return response()->json(['data' => $courses, 'code' => 1, 'message' => 'OK'])
+        ->header('Cache-Control', 'no-store, no-cache, must-revalidate')
+        ->header('Pragma', 'no-cache')
+        ->header('Expires', '0');
+}
     /** GET /api/courses/catalog  — learner public catalog */
     public function getCatalogCourseList(Request $request)
     {
