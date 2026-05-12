@@ -265,6 +265,7 @@ Route::middleware(['auth:sanctum', CheckLmsAuth::class])->group(function () {
         Route::get('getUserDetailList', [SettingController::class, 'getUserDetail']);
         Route::get('getAllRoles', [SettingController::class, 'getAllRoles']);
         Route::post('setAdminRoles', [SettingController::class, 'setAdminRoles']);
+        Route::post('toggleUserStatus', [SettingController::class, 'toggleUserStatus']);
         Route::get('getAllQuizList', [QuizController::class, 'getAllQuizList']);
         Route::get('getAllInterviewList', [InterviewController::class, 'getAllInterviewList']);
 

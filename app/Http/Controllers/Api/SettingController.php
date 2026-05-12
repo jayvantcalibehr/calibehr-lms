@@ -310,4 +310,22 @@ class SettingController extends Controller
             }
         });
     }
+    /** POST /api/Webservices/toggleUserStatus */
+public function toggleUserStatus(Request $request)
+{
+    $request->validate(['userID' => 'required|integer']);
+    $user = User::findOrFail($request->userID);
+    $currentId = auth('sanctum')->id();
+    if ($user->id === $currentId) {
+        return $this->out(null, 0, 'You cannot disable your own account.');
+    }
+    $isActive = $user->emp_active === 'A' && $user->emp_status === 'A';
+    if ($isActive) {
+        $user->emp_active = 'I'; $user->emp_status = 'I'; $user->save();
+        return $this->out(['status' => 'inactive'], 1, 'User disabled successfully.');
+    } else {
+        $user->emp_active = 'A'; $user->emp_status = 'A'; $user->save();
+        return $this->out(['status' => 'active'], 1, 'User enabled successfully.');
+    }
+}
 }
