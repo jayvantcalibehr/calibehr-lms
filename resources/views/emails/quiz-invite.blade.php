@@ -1,143 +1,133 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f4f4f4;
-            margin: 0;
-            padding: 0;
-        }
-        .container {
-            max-width: 600px;
-            margin: 30px auto;
-            background: #ffffff;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .header {
-            background: #1F4E79;
-            padding: 30px;
-            text-align: center;
-        }
-        .header h1 {
-            color: #ffffff;
-            margin: 0;
-            font-size: 24px;
-        }
-        .body {
-            padding: 30px;
-        }
-        .body p {
-            color: #555;
-            font-size: 15px;
-            line-height: 1.6;
-        }
-        .quiz-box {
-            background: #f0f4f8;
-            border-left: 4px solid #1F4E79;
-            padding: 15px 20px;
-            margin: 20px 0;
-            border-radius: 4px;
-        }
-        .quiz-box h2 {
-            color: #1F4E79;
-            margin: 0 0 5px 0;
-            font-size: 18px;
-        }
-        .quiz-box p {
-            margin: 0;
-            color: #666;
-            font-size: 13px;
-        }
-        .btn {
-            display: block;
-            width: 200px;
-            margin: 25px auto;
-            padding: 14px 0;
-            background: #1F4E79;
-            color: #ffffff !important;
-            text-align: center;
-            text-decoration: none;
-            border-radius: 5px;
-            font-size: 16px;
-            font-weight: bold;
-        }
-        .footer {
-            background: #f4f4f4;
-            padding: 20px;
-            text-align: center;
-            font-size: 12px;
-            color: #999;
-        }
-        .info-row {
-            display: flex;
-            margin: 8px 0;
-        }
-        .info-label {
-            font-weight: bold;
-            color: #333;
-            width: 140px;
-        }
-        .info-value {
-            color: #555;
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quiz Invitation — Calibehr LMS</title>
 </head>
-<body>
-    <div class="container">
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f3f4f6;padding:40px 16px;">
+  <tr><td align="center">
 
-        <div class="header">
-            <h1>📝 Quiz Invitation</h1>
-        </div>
+    <!-- Brand -->
+    <table width="580" cellpadding="0" cellspacing="0" border="0" style="max-width:580px;">
+      <tr><td align="center" style="padding-bottom:20px;">
+        <div style="font-size:15px;font-weight:700;color:#10b981;letter-spacing:0.04em;text-transform:uppercase;font-family:Arial,sans-serif;">Calibehr Learning</div>
+        <div style="font-size:12px;color:#9ca3af;margin-top:4px;font-family:Arial,sans-serif;">Learning Management System</div>
+      </td></tr>
+    </table>
 
-        <div class="body">
-            <p>Dear Candidate,</p>
-            <p>You have been invited to take a quiz on <strong>Calibehr LMS</strong>. Please find the details below:</p>
+    <!-- Card -->
+    <table width="580" cellpadding="0" cellspacing="0" border="0" style="max-width:580px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
 
-            <div class="quiz-box">
-                <h2>{{ $quiz->name }}</h2>
-                <p>{{ $quiz->description }}</p>
-            </div>
+      <!-- Hero -->
+      <tr><td align="center" bgcolor="#4338ca" style="padding:40px 32px 32px;background-color:#4338ca;">
+        <div style="font-size:36px;margin-bottom:12px;">📝</div>
+        <h1 style="color:#ffffff;font-size:22px;font-weight:700;margin:0 0 6px;font-family:Arial,sans-serif;">Quiz Invitation</h1>
+        <p style="color:#c7d2fe;font-size:14px;margin:0;font-family:Arial,sans-serif;">You have been invited to take a quiz</p>
+      </td></tr>
 
-            <div class="info-row">
-                <span class="info-label">⏱️ Time Limit:</span>
-                <span class="info-value">{{ $quiz->time > 0 ? $quiz->time . ' minutes' : 'No time limit' }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">🎯 Passing Score:</span>
-                <span class="info-value">{{ $quiz->passing_percentage }}%</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">🔄 Attempts:</span>
-                <span class="info-value">{{ $quiz->number_of_attempt == 0 ? 'Unlimited' : $quiz->number_of_attempt }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">📧 Invite ID:</span>
-                <span class="info-value">#{{ $invite->id }}</span>
-            </div>
+      <!-- Body -->
+      <tr><td style="padding:32px;">
 
-            <p style="margin-top: 20px;">Click the button below to start your quiz:</p>
+        <!-- Greeting -->
+        <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;font-family:Arial,sans-serif;">
+          Dear Candidate,<br><br>
+          You have been invited to take a <strong>quiz</strong> on <strong>Calibehr LMS</strong>. Please find the details below:
+        </p>
 
-            <a href="{{ config('app.url') }}/quiz-take/{{ $invite->id }}" class="btn">
-                Start Quiz →
-            </a>
+        <!-- Quiz Name Card -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef2ff;border:1.5px solid #c7d2fe;border-radius:10px;margin-bottom:24px;">
+          <tr><td style="padding:18px 22px;">
+            <div style="font-size:18px;font-weight:700;color:#3730a3;margin-bottom:4px;font-family:Arial,sans-serif;">{{ $quiz->name ?? 'Quiz' }}</div>
+            @if(!empty($quiz->description))
+            <div style="font-size:13px;color:#6b7280;line-height:1.5;font-family:Arial,sans-serif;">{{ $quiz->description }}</div>
+            @endif
+          </td></tr>
+        </table>
 
-            <p style="font-size: 13px; color: #999;">
-                If the button doesn't work, copy this link:<br>
-                <a href="{{ config('app.url') }}/quiz-take/{{ $invite->id }}">
-                    {{ config('app.url') }}/quiz-take/{{ $invite->id }}
-                </a>
+        <!-- Info Rows -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9fafb;border-radius:10px;margin-bottom:24px;">
+          <tr><td style="padding:12px 16px;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:13px;color:#6b7280;font-family:Arial,sans-serif;">📧 &nbsp;Invited Email: &nbsp;</span>
+            <span style="font-size:13px;color:#111827;font-weight:600;font-family:Arial,sans-serif;">{{ $invite->email }}</span>
+          </td></tr>
+          @if(!empty($quiz->time) && $quiz->time > 0)
+          <tr><td style="padding:12px 16px;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:13px;color:#6b7280;font-family:Arial,sans-serif;">⏱️ &nbsp;Time Limit: &nbsp;</span>
+            <span style="font-size:13px;color:#111827;font-weight:600;font-family:Arial,sans-serif;">{{ $quiz->time }} minutes</span>
+          </td></tr>
+          @endif
+          @if(!empty($quiz->no_of_questions))
+          <tr><td style="padding:12px 16px;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:13px;color:#6b7280;font-family:Arial,sans-serif;">❓ &nbsp;Questions: &nbsp;</span>
+            <span style="font-size:13px;color:#111827;font-weight:600;font-family:Arial,sans-serif;">{{ $quiz->no_of_questions }}</span>
+          </td></tr>
+          @endif
+          @if(!empty($quiz->passing_percentage))
+          <tr><td style="padding:12px 16px;">
+            <span style="font-size:13px;color:#6b7280;font-family:Arial,sans-serif;">🎯 &nbsp;Passing Score: &nbsp;</span>
+            <span style="font-size:13px;color:#111827;font-weight:600;font-family:Arial,sans-serif;">{{ $quiz->passing_percentage }}%</span>
+          </td></tr>
+          @endif
+        </table>
+
+        <!-- Tips -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;margin-bottom:28px;">
+          <tr><td style="padding:16px 20px;">
+            <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:10px;font-family:Arial,sans-serif;">📌 Before you begin</div>
+            <ul style="margin:0;padding-left:18px;color:#78350f;font-size:13px;line-height:1.9;font-family:Arial,sans-serif;">
+              <li>Read each question carefully before answering</li>
+              @if(!empty($quiz->time) && $quiz->time > 0)
+              <li>You have {{ $quiz->time }} minutes to complete the quiz</li>
+              @endif
+              <li>Avoid switching browser tabs during the quiz</li>
+              <li>You can only submit this quiz once</li>
+              <li>Ensure a stable internet connection</li>
+            </ul>
+          </td></tr>
+        </table>
+
+        <!-- CTA Button -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:24px;">
+          <tr><td align="center" style="padding:8px 0;">
+            <table cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" bgcolor="#4338ca" style="border-radius:12px;">
+                  <a href="{{ config('app.url') }}/quiz-take/{{ $invite->unique_id }}"
+                     style="display:inline-block;background-color:#4338ca;color:#ffffff;text-decoration:none;padding:16px 52px;border-radius:12px;font-size:16px;font-weight:700;font-family:Arial,sans-serif;letter-spacing:0.01em;border-bottom:4px solid #3730a3;">
+                    📝 &nbsp; Start Quiz &nbsp; →
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td></tr>
+        </table>
+
+        <!-- Fallback -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9fafb;border-radius:8px;margin-bottom:20px;">
+          <tr><td style="padding:12px 16px;">
+            <p style="font-size:12px;color:#6b7280;margin:0;line-height:1.6;font-family:Arial,sans-serif;">
+              If the button doesn't work, copy this link:<br>
+              <a href="{{ config('app.url') }}/quiz-take/{{ $invite->unique_id }}" style="color:#4338ca;word-break:break-all;font-family:Arial,sans-serif;">
+                {{ config('app.url') }}/quiz-take/{{ $invite->unique_id }}
+              </a>
             </p>
-        </div>
+          </td></tr>
+        </table>
 
-        <div class="footer">
-            <p>This email was sent by <strong>Calibehr LMS</strong></p>
-            <p>© {{ date('Y') }} Calibehr. All rights reserved.</p>
-        </div>
+        <p style="text-align:center;font-size:12px;color:#9ca3af;margin:0;font-family:Arial,sans-serif;">🔒 This link is unique to you. Please do not share it with others.</p>
 
-    </div>
+      </td></tr>
+
+      <!-- Footer -->
+      <tr><td align="center" style="padding:20px 32px;border-top:1px solid #f3f4f6;">
+        <p style="font-size:12px;color:#9ca3af;margin:0;font-family:Arial,sans-serif;">This email was sent by <strong style="color:#6b7280;">Calibehr LMS</strong></p>
+        <p style="font-size:12px;color:#9ca3af;margin:4px 0 0;font-family:Arial,sans-serif;">© {{ date('Y') }} Calibehr. All rights reserved.</p>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
 </body>
 </html>
