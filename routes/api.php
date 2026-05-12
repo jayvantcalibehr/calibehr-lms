@@ -188,6 +188,7 @@ Route::middleware(['auth:sanctum', CheckLmsAuth::class])->group(function () {
         Route::post('deleteFeedbackQuestion', [CourseController::class, 'deleteFeedbackQuestion']);
         Route::get('getFeedbackQuestionsWS', [CourseController::class, 'getFeedbackQuestionsWS']);
 
+
         // Wishlist
         Route::post('anrToWishlistWS', [CourseController::class, 'toggleWishlist']);
         Route::get('getWishlistWS', [CourseController::class, 'getWishlist']);
@@ -300,6 +301,9 @@ Route::middleware(['auth:sanctum', CheckLmsAuth::class])->group(function () {
     Route::get('reports/feedback',       [ReportController::class, 'getFeedbackReport']);
     Route::get('reports/feedback/excel', [ReportController::class, 'downloadFeedbackReportExcel']);
     Route::get('reports/feedback/pdf',   [ReportController::class, 'downloadFeedbackReportPdf']);
+    Route::get('reports/interview',       [ReportController::class, 'getInterviewReport']);
+Route::get('reports/interview/excel', [ReportController::class, 'downloadInterviewReportExcel']);
+Route::get('reports/interview/pdf',   [ReportController::class, 'downloadInterviewReportPdf']);
 
 
     // --- File Uploads ---

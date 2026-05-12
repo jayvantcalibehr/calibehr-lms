@@ -79,29 +79,68 @@ class AuthController extends Controller
 
     public function me(Request $request)
     {
-        $user = $request->user();
+        $user  = $request->user();
         $roles = UserRole::where('user_id', $user->id)->pluck('role_id')->toArray();
 
+        // Resolve designation & department names from ECR
+        $designationName = $user->emp_designation;
+        $departmentName  = $user->emp_department;
+
+        try {
+            $serverName = env('ECR_SQLSRV_HOST', 'tcp:172.16.1.30,1433');
+            $config = [
+                'Database'               => env('ECR_SQLSRV_DB', 'ECR_New'),
+                'Uid'                    => env('ECR_SQLSRV_USER', 'nbg_sa'),
+                'PWD'                    => env('ECR_SQLSRV_PASS', ''),
+                'TrustServerCertificate' => true,
+                'LoginTimeout'           => 5,
+            ];
+            $conn = @sqlsrv_connect($serverName, $config);
+            if ($conn) {
+                // Designation name
+                if (!empty($user->emp_designation) && is_numeric($user->emp_designation)) {
+                    $stmt = sqlsrv_query($conn, "SELECT TOP 1 DesignationName FROM [ECR_New].[dbo].[Designation] WHERE ID = ?", [$user->emp_designation]);
+                    if ($stmt) {
+                        $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+                        if ($row) $designationName = $row['DesignationName'];
+                    }
+                }
+                // Department name
+                if (!empty($user->emp_department) && is_numeric($user->emp_department) && (int)$user->emp_department > 0) {
+                    $stmt = sqlsrv_query($conn, "SELECT TOP 1 DeptName FROM [ECR_New].[dbo].[Department] WHERE ID = ?", [$user->emp_department]);
+                    if ($stmt) {
+                        $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+                        if ($row) $departmentName = $row['DeptName'];
+                    }
+                }
+                sqlsrv_close($conn);
+            }
+        } catch (\Throwable $e) {
+            // ECR unreachable — use raw values
+        }
+
         return $this->out([
-            'id' => $user->id,
-            'emp_code' => $user->emp_code,
-            'name' => $user->full_name,
-            'firstName' => $user->emp_first_name,
-            'middleName' => $user->emp_middle_name,
-            'lastName' => $user->emp_last_name,
-            'email' => $user->emp_email,
-            'phone' => $user->emp_phone,
-            'photo' => $user->emp_photo,
-            'designation' => $user->emp_designation,
-            'department' => $user->emp_department,
-            'doj' => $user->emp_doj,
-            'location' => $user->emp_location,
-            'onRoll' => $user->on_roll,
-            'empStatus' => $user->emp_status,
-            'empActive' => $user->emp_active,
-            'role' => $roles,
-            'client' => $user->emp_client,
-            'clientDept' => $user->emp_client_department,
+            'id'          => $user->id,
+            'emp_code'    => $user->emp_code,
+            'name'        => $user->full_name,
+            'firstName'   => $user->emp_first_name,
+            'middleName'  => $user->emp_middle_name,
+            'lastName'    => $user->emp_last_name,
+            'email'       => $user->emp_email,
+            'phone'       => $user->emp_phone,
+            'photo'       => $user->emp_photo,
+            'designation' => $designationName,
+            'department'  => $departmentName,
+            'emp_designation' => $designationName,
+            'emp_department'  => $user->emp_department,
+            'doj'         => $user->emp_doj,
+            'location'    => $user->emp_location,
+            'onRoll'      => $user->on_roll,
+            'empStatus'   => $user->emp_status,
+            'empActive'   => $user->emp_active,
+            'role'        => $roles,
+            'client'      => $user->emp_client,
+            'clientDept'  => $user->emp_client_department,
         ], 1, 'OK');
     }
 
@@ -198,7 +237,35 @@ class AuthController extends Controller
             return $this->out(null, 0, 'Invalid LDAP credentials.');
         }
 
-        // Login successful
+        // Login successful — sync department from ECR if emp_department is 0
+        if ((int)$user->emp_department === 0) {
+            try {
+                $serverName = env('ECR_SQLSRV_HOST', 'tcp:172.16.1.30,1433');
+                $config = [
+                    'Database' => env('ECR_SQLSRV_DB', 'ECR_New'),
+                    'Uid'      => env('ECR_SQLSRV_USER', 'nbg_sa'),
+                    'PWD'      => env('ECR_SQLSRV_PASS', ''),
+                    'TrustServerCertificate' => true,
+                    'LoginTimeout' => 5,
+                ];
+                $conn = @sqlsrv_connect($serverName, $config);
+                if ($conn) {
+                    $sql  = "SELECT TOP 1 DepartmentId FROM [ECR_New].[dbo].[Employee] WHERE EmpCode = ?";
+                    $stmt = sqlsrv_query($conn, $sql, [$empCode]);
+                    if ($stmt) {
+                        $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+                        if ($row && !empty($row['DepartmentId'])) {
+                            $user->emp_department = (int)$row['DepartmentId'];
+                            $user->save();
+                        }
+                    }
+                    sqlsrv_close($conn);
+                }
+            } catch (\Throwable $e) {
+                // ECR sync failed — continue login anyway
+            }
+        }
+
         $roles = UserRole::where('user_id', $user->id)->pluck('role_id')->toArray();
         if (empty($roles)) {
             $roles = [3];
