@@ -85,6 +85,7 @@ class AuthController extends Controller
         // Resolve designation & department names from ECR
         $designationName = $user->emp_designation;
         $departmentName  = $user->emp_department;
+        $locationName    = $user->emp_location;
 
         try {
             $serverName = env('ECR_SQLSRV_HOST', 'tcp:172.16.1.30,1433');
@@ -113,6 +114,14 @@ class AuthController extends Controller
                         if ($row) $departmentName = $row['DeptName'];
                     }
                 }
+                // Location (Branch) name
+                if (!empty($user->emp_location) && is_numeric($user->emp_location) && (int)$user->emp_location > 0) {
+                    $stmt = sqlsrv_query($conn, "SELECT TOP 1 BranchName FROM [ECR_New].[dbo].[Branch] WHERE ID = ?", [$user->emp_location]);
+                    if ($stmt) {
+                        $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+                        if ($row) $locationName = $row['BranchName'];
+                    }
+                }
                 sqlsrv_close($conn);
             }
         } catch (\Throwable $e) {
@@ -134,7 +143,7 @@ class AuthController extends Controller
             'emp_designation' => $designationName,
             'emp_department'  => $user->emp_department,
             'doj'         => $user->emp_doj,
-            'location'    => $user->emp_location,
+            'location'    => $locationName,
             'onRoll'      => $user->on_roll,
             'empStatus'   => $user->emp_status,
             'empActive'   => $user->emp_active,
