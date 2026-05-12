@@ -637,8 +637,7 @@ $learners = CourseLearner::with('course')
     'enrolled'            => true,
     // ← Add these two lines:
     'learner_count'       => \App\Models\CourseLearner::where('course_id', $l->course_id)->where('status', 1)->count(),
-    'rating'              => \App\Models\CourseFeedbackRating::where('course_id', $l->course_id)->avg('rating'),
-];
+'rating' => round(\App\Models\CourseFeedbackRating::where('course_id', $l->course_id)->avg('star') ?? 0, 1),];
     });
 
     return $this->out($data, 1, 'OK');
