@@ -153,6 +153,9 @@ Route::middleware(['auth:sanctum', CheckLmsAuth::class])->group(function () {
         Route::post('updateTopicTimeWS', [CourseController::class, 'updateTopicTime']);
         Route::post('testSubmitWS', [CourseController::class, 'testSubmit']);
         Route::post('testSubmitMobileWS', [CourseController::class, 'testSubmit']);
+        Route::get('getLockedUsersWS',          [CourseController::class, 'getLockedUsers']);
+        Route::post('unlockAttemptWS',          [CourseController::class, 'unlockAttempt']);
+        Route::post('bulkUnlockAttemptWS',      [CourseController::class, 'bulkUnlockAttempt']);
         Route::get('getResultUserWS', [CourseController::class, 'getResultUser']);
         Route::get('getResultDetails', [CourseController::class, 'getResultDetails']);
         Route::get('getResultSummary', [CourseController::class, 'getResultSummary']);

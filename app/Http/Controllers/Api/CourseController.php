@@ -433,6 +433,139 @@ public function getCourseList(Request $request)
     // TEST SUBMIT (in-course test)
     // =========================================================================
 
+    /** GET /api/courses/locked-users?topicID= */
+    public function getLockedUsers(Request $request)
+    {
+        $request->validate(['topicID' => 'required|integer']);
+        $topic = CourseTopic::findOrFail($request->topicID);
+
+        if ($topic->number_of_attempt == 0) {
+            return $this->out([], 1, 'No attempt limit set for this test.');
+        }
+
+        // Users who have hit the attempt limit
+        $locked = DB::table('topic_question_answers as a')
+            ->select(
+                'a.answered_by as userID',
+                DB::raw('COUNT(*) as attemptCount'),
+                DB::raw('MAX(a.percentage) as bestScore'),
+                DB::raw('MAX(a.answered_on) as lastAttemptOn')
+            )
+            ->where('a.topic_id', $request->topicID)
+            ->groupBy('a.answered_by')
+            ->havingRaw('COUNT(*) >= ?', [$topic->number_of_attempt])
+            ->get();
+
+        // Check unlock status for each
+        $unlocks = DB::table('topic_attempt_unlocks')
+            ->where('topic_id', $request->topicID)
+            ->where('used', 0)
+            ->pluck('user_id')
+            ->toArray();
+
+        $result = [];
+        foreach ($locked as $row) {
+            $user = DB::connection('mysql')->table('users')->where('id', $row->userID)->first();
+            if (!$user) continue;
+            $result[] = [
+                'userID'       => $row->userID,
+                'learnerName'  => trim(($user->emp_first_name ?? '') . ' ' . ($user->emp_last_name ?? '')),
+                'learnerEmail' => $user->emp_email ?? '',
+                'learnerEmpCode' => $user->emp_code ?? '',
+                'learnerDP'    => $user->emp_photo ?? '',
+                'attemptCount' => $row->attemptCount,
+                'bestScore'    => round($row->bestScore, 1),
+                'lastAttemptOn'=> $row->lastAttemptOn,
+                'isUnlocked'   => in_array($row->userID, $unlocks) ? 1 : 0,
+            ];
+        }
+
+        return $this->out($result, 1, 'Success');
+    }
+
+    /** POST /api/courses/unlock-attempt */
+    public function unlockAttempt(Request $request)
+    {
+        $request->validate([
+            'topicID' => 'required|integer',
+            'userID'  => 'required|integer',
+        ]);
+
+        $existing = DB::table('topic_attempt_unlocks')
+            ->where('topic_id', $request->topicID)
+            ->where('user_id', $request->userID)
+            ->where('used', 0)
+            ->count();
+
+        if ($existing > 0) {
+            return $this->out(null, 0, 'Attempt already unlocked. Wait for user to use it first.');
+        }
+
+        $topic = CourseTopic::findOrFail($request->topicID);
+
+        DB::table('topic_attempt_unlocks')->insert([
+            'topic_id'    => $request->topicID,
+            'course_id'   => $topic->course_id,
+            'chapter_id'  => $topic->chapter_id,
+            'user_id'     => $request->userID,
+            'unlocked_by' => $this->userId($request),
+            'used'        => 0,
+            'unlocked_on' => now(),
+        ]);
+
+        return $this->out(null, 1, 'Attempt unlocked successfully!');
+    }
+
+    /** POST /api/courses/bulk-unlock-attempt */
+    public function bulkUnlockAttempt(Request $request)
+    {
+        $request->validate([
+            'topicID' => 'required|integer',
+            'userIDs' => 'required|array',
+            'userIDs.*' => 'integer',
+        ]);
+
+        $topic = CourseTopic::findOrFail($request->topicID);
+        $adminId = $this->userId($request);
+
+        $successCount = 0;
+        $skippedCount = 0;
+        $skippedNames = [];
+
+        foreach ($request->userIDs as $userID) {
+            $existing = DB::table('topic_attempt_unlocks')
+                ->where('topic_id', $request->topicID)
+                ->where('user_id', $userID)
+                ->where('used', 0)
+                ->count();
+
+            if ($existing > 0) {
+                $skippedCount++;
+                $u = DB::table('users')->where('id', $userID)->first();
+                if ($u) $skippedNames[] = trim($u->emp_first_name . ' ' . $u->emp_last_name);
+                continue;
+            }
+
+            DB::table('topic_attempt_unlocks')->insert([
+                'topic_id'    => $request->topicID,
+                'course_id'   => $topic->course_id,
+                'chapter_id'  => $topic->chapter_id,
+                'user_id'     => $userID,
+                'unlocked_by' => $adminId,
+                'used'        => 0,
+                'unlocked_on' => now(),
+            ]);
+            $successCount++;
+        }
+
+        $msg = $successCount . ' attempt(s) unlocked successfully!';
+        if ($skippedCount > 0) {
+            $msg .= ' ' . $skippedCount . ' skipped (already unlocked): ' . implode(', ', $skippedNames);
+        }
+
+        return $this->out(['successCount' => $successCount, 'skippedCount' => $skippedCount], 1, $msg);
+    }
+
     /** POST /api/courses/test-submit */
     public function testSubmit(Request $request)
     {
@@ -443,6 +576,33 @@ public function getCourseList(Request $request)
             'answers'   => 'required|array',
         ]);
         $uid = $this->userId($request);
+
+        // Check attempt limit
+        $topic = CourseTopic::find($request->topicID);
+        if ($topic && $topic->number_of_attempt > 0) {
+            $pastCount = DB::table('topic_question_answers')
+                ->where('topic_id', $request->topicID)
+                ->where('answered_by', $uid)
+                ->count();
+
+            if ($pastCount >= $topic->number_of_attempt) {
+                // Check if admin unlocked
+                $unlocked = DB::table('topic_attempt_unlocks')
+                    ->where('topic_id', $request->topicID)
+                    ->where('user_id', $uid)
+                    ->where('used', 0)
+                    ->first();
+
+                if (!$unlocked) {
+                    return $this->out(null, 0, 'Attempt limit reached. Please contact admin to unlock.');
+                }
+
+                // Mark unlock as used
+                DB::table('topic_attempt_unlocks')
+                    ->where('id', $unlocked->id)
+                    ->update(['used' => 1, 'used_on' => now()]);
+            }
+        }
 
         $questions = TopicQuestion::where('topic_id', $request->topicID)->with('options')->get();
         $points = 0; $total = 0; $correct = 0;
