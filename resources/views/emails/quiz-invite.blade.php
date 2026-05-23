@@ -94,7 +94,7 @@
             <table cellpadding="0" cellspacing="0" border="0">
               <tr>
                 <td align="center" bgcolor="#4338ca" style="border-radius:12px;">
-                  <a href="{{ config('app.url') }}/quiz-take/{{ $invite->unique_id }}"
+                  <a href="{{ config('app.url') }}/quiz-take/{{ $invite->id }}"
                      style="display:inline-block;background-color:#4338ca;color:#ffffff;text-decoration:none;padding:16px 52px;border-radius:12px;font-size:16px;font-weight:700;font-family:Arial,sans-serif;letter-spacing:0.01em;border-bottom:4px solid #3730a3;">
                     📝 &nbsp; Start Quiz &nbsp; →
                   </a>
@@ -109,8 +109,8 @@
           <tr><td style="padding:12px 16px;">
             <p style="font-size:12px;color:#6b7280;margin:0;line-height:1.6;font-family:Arial,sans-serif;">
               If the button doesn't work, copy this link:<br>
-              <a href="{{ config('app.url') }}/quiz-take/{{ $invite->unique_id }}" style="color:#4338ca;word-break:break-all;font-family:Arial,sans-serif;">
-                {{ config('app.url') }}/quiz-take/{{ $invite->unique_id }}
+              <a href="{{ config('app.url') }}/quiz-take/{{ $invite->id }}" style="color:#4338ca;word-break:break-all;font-family:Arial,sans-serif;">
+                {{ config('app.url') }}/quiz-take/{{ $invite->id }}
               </a>
             </p>
           </td></tr>
