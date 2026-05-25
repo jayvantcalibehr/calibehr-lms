@@ -443,17 +443,22 @@ public function getCourseList(Request $request)
             return $this->out([], 1, 'No attempt limit set for this test.');
         }
 
-        // Users who have hit the attempt limit
+        // Users who have exhausted failed attempts and never passed
         $locked = DB::table('topic_question_answers as a')
             ->select(
                 'a.answered_by as userID',
                 DB::raw('COUNT(*) as attemptCount'),
+                DB::raw('SUM(CASE WHEN a.percentage < ' . (int)$topic->passing_percentage . ' THEN 1 ELSE 0 END) as failedCount'),
                 DB::raw('MAX(a.percentage) as bestScore'),
                 DB::raw('MAX(a.answered_on) as lastAttemptOn')
             )
             ->where('a.topic_id', $request->topicID)
             ->groupBy('a.answered_by')
-            ->havingRaw('COUNT(*) >= ?', [$topic->number_of_attempt])
+            ->havingRaw('SUM(CASE WHEN a.percentage < ? THEN 1 ELSE 0 END) >= ? AND MAX(a.percentage) < ?', [
+                $topic->passing_percentage,
+                $topic->number_of_attempt,
+                $topic->passing_percentage,
+            ])
             ->get();
 
         // Check unlock status for each
@@ -582,13 +587,14 @@ public function getCourseList(Request $request)
         if ($topic && $topic->number_of_attempt > 0) {
             $passingPct = (int) $topic->passing_percentage;
 
-            // Check 1 — Total attempts >= limit → Block
-            $totalAttempts = DB::table('topic_question_answers')
+            // Check — Failed attempts >= limit → Block (pass wale block nahi honge)
+            $failedAttempts = DB::table('topic_question_answers')
                 ->where('topic_id', $request->topicID)
                 ->where('answered_by', $uid)
+                ->where('percentage', '<', $passingPct)
                 ->count();
 
-            if ($totalAttempts >= $topic->number_of_attempt) {
+            if ($failedAttempts >= $topic->number_of_attempt) {
                 $unlocked = DB::table('topic_attempt_unlocks')
                     ->where('topic_id', $request->topicID)
                     ->where('user_id', $uid)
