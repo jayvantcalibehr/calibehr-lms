@@ -580,13 +580,15 @@ public function getCourseList(Request $request)
         // Check attempt limit
         $topic = CourseTopic::find($request->topicID);
         if ($topic && $topic->number_of_attempt > 0) {
-            $pastCount = DB::table('topic_question_answers')
+            $passingPct = (int) $topic->passing_percentage;
+
+            // Check 1 — Total attempts >= limit → Block
+            $totalAttempts = DB::table('topic_question_answers')
                 ->where('topic_id', $request->topicID)
                 ->where('answered_by', $uid)
                 ->count();
 
-            if ($pastCount >= $topic->number_of_attempt) {
-                // Check if admin unlocked
+            if ($totalAttempts >= $topic->number_of_attempt) {
                 $unlocked = DB::table('topic_attempt_unlocks')
                     ->where('topic_id', $request->topicID)
                     ->where('user_id', $uid)
@@ -596,11 +598,6 @@ public function getCourseList(Request $request)
                 if (!$unlocked) {
                     return $this->out(null, 0, 'Attempt limit reached. Please contact admin to unlock.');
                 }
-
-                // Mark unlock as used
-                DB::table('topic_attempt_unlocks')
-                    ->where('id', $unlocked->id)
-                    ->update(['used' => 1, 'used_on' => now()]);
             }
         }
 
@@ -653,6 +650,23 @@ public function getCourseList(Request $request)
                 ['completed' => 1, 'completed_on' => now()]
             );
             $this->updateLeaderboard($uid, $request->courseID);
+        }
+
+        // Check 2 — After submit: fail attempts >= limit → mark unlock as used
+        if ($topic && $topic->number_of_attempt > 0) {
+            $failCount = DB::table('topic_question_answers')
+                ->where('topic_id', $request->topicID)
+                ->where('answered_by', $uid)
+                ->where('percentage', '<', $topic->passing_percentage ?? 75)
+                ->count();
+
+            if ($failCount >= $topic->number_of_attempt) {
+                DB::table('topic_attempt_unlocks')
+                    ->where('topic_id', $request->topicID)
+                    ->where('user_id', $uid)
+                    ->where('used', 0)
+                    ->update(['used' => 1, 'used_on' => now()]);
+            }
         }
 
         return $this->out([
