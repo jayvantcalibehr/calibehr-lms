@@ -25,14 +25,11 @@ use Illuminate\Support\Facades\Route;
 
 // ============================================================
 // PUBLIC — Auth (no token required)
+// Rate limited: 10 attempts per minute per IP (brute-force protection).
+// login() / loginWS() removed — dead code, used md5. LDAP only.
 // ============================================================
-Route::prefix('auth')->group(function () {
-    // Web + mobile login — matches original:f
-    // POST Webservice/login         → MitraConnect/loginWeb
-    // POST Webservice/loginWS       → MitraConnect/loginMobile
-    Route::post('login', [AuthController::class, 'login']);
-    Route::post('loginWS', [AuthController::class, 'login']);
-    Route::post('loginLdap', [AuthController::class, 'loginLdap']);
+Route::middleware('throttle:10,1')->prefix('auth')->group(function () {
+    Route::post('loginLdap',    [AuthController::class, 'loginLdap']);
     Route::post('loginLdapWeb', [AuthController::class, 'loginLdap']); // mobile alias
 });
 

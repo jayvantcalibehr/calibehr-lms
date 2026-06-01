@@ -24,6 +24,7 @@ use App\Models\User;
 use App\Models\AppVersion;
 use App\Models\PushNotificationToken;
 use Illuminate\Http\Request;
+use App\Services\EcrService;
 use Illuminate\Support\Facades\DB;
 
 class CourseController extends Controller
@@ -119,25 +120,66 @@ public function getCourseList(Request $request)
             ->where('visibility', 0)
             ->orderByDesc('featured')
             ->orderBy('name')
-            ->get()
-            ->map(function ($c) use ($uid) {
-                $data                  = $this->formatCourse($c);
-                $data['enrolled']      = CourseLearner::where('course_id', $c->id)->where('learner_id', $uid)->exists();
-                $data['wishlisted']    = Wishlist::where('course_id', $c->id)->where('user_id', $uid)->exists();
-                $data['learner_count'] = CourseLearner::where('course_id', $c->id)->where('status', 1)->count();
-                $data['rating']        = round(CourseFeedbackRating::where('course_id', $c->id)->where('status', 1)->avg('star') ?? 0, 1);
+            ->get();
 
-                // Progress for enrolled learner
-                if ($data['enrolled']) {
-                    $learner = CourseLearner::where('course_id', $c->id)->where('learner_id', $uid)->first();
-                    $totalTopics     = CourseTopic::where('course_id', $c->id)->where('status', 1)->count();
-                    $completedTopics = CourseLearnerTopicStatus::where('course_id', $c->id)->where('user_id', $uid)->where('completed', 1)->count();
-                    $data['completed']           = $learner ? $learner->completed : 0;
-                    $data['progress_percentage'] = $learner && $learner->completed ? 100 : ($totalTopics > 0 ? round(($completedTopics / $totalTopics) * 100) : 0);
-                }
-                return $data;
-            });
-        return $this->out($courses, 1, 'OK');
+        if ($courses->isEmpty()) {
+            return $this->out([], 1, 'OK');
+        }
+
+        $courseIds = $courses->pluck('id');
+
+        // Batch all per-course aggregates — 1 query each instead of N
+        $enrolledIds = CourseLearner::whereIn('course_id', $courseIds)
+            ->where('learner_id', $uid)->pluck('course_id')->flip();
+
+        $wishlistIds = Wishlist::whereIn('course_id', $courseIds)
+            ->where('user_id', $uid)->pluck('course_id')->flip();
+
+        $learnerCounts = CourseLearner::whereIn('course_id', $courseIds)
+            ->where('status', 1)
+            ->selectRaw('course_id, COUNT(*) as cnt')
+            ->groupBy('course_id')->pluck('cnt', 'course_id');
+
+        $ratings = CourseFeedbackRating::whereIn('course_id', $courseIds)
+            ->where('status', 1)
+            ->selectRaw('course_id, AVG(star) as avg_star')
+            ->groupBy('course_id')->pluck('avg_star', 'course_id');
+
+        $enrolledRows = CourseLearner::whereIn('course_id', $courseIds)
+            ->where('learner_id', $uid)->get()->keyBy('course_id');
+
+        $topicTotals = CourseTopic::whereIn('course_id', $courseIds)
+            ->where('status', 1)
+            ->selectRaw('course_id, COUNT(*) as cnt')
+            ->groupBy('course_id')->pluck('cnt', 'course_id');
+
+        $completedTopics = CourseLearnerTopicStatus::whereIn('course_id', $courseIds)
+            ->where('user_id', $uid)->where('completed', 1)
+            ->selectRaw('course_id, COUNT(*) as cnt')
+            ->groupBy('course_id')->pluck('cnt', 'course_id');
+
+        $result = $courses->map(function ($c) use (
+            $uid, $enrolledIds, $wishlistIds, $learnerCounts,
+            $ratings, $enrolledRows, $topicTotals, $completedTopics
+        ) {
+            $data                  = $this->formatCourse($c);
+            $data['enrolled']      = isset($enrolledIds[$c->id]);
+            $data['wishlisted']    = isset($wishlistIds[$c->id]);
+            $data['learner_count'] = $learnerCounts[$c->id] ?? 0;
+            $data['rating']        = round($ratings[$c->id] ?? 0, 1);
+
+            if ($data['enrolled']) {
+                $learner  = $enrolledRows[$c->id] ?? null;
+                $total    = $topicTotals[$c->id] ?? 0;
+                $done     = $completedTopics[$c->id] ?? 0;
+                $data['completed']           = $learner?->completed ?? 0;
+                $data['progress_percentage'] = ($learner && $learner->completed) ? 100
+                    : ($total > 0 ? round(($done / $total) * 100) : 0);
+            }
+            return $data;
+        });
+
+        return $this->out($result, 1, 'OK');
     }
 
     /** GET /api/courses/{id}/details */
@@ -830,25 +872,36 @@ $learners = CourseLearner::with('course')
     /** GET /api/leaderboard */
     public function getLeaderboard(Request $request)
     {
+        // withCount avoids N+1 — single JOIN instead of one query per user
         $board = Leaderboard::with('user')
             ->orderByDesc('points')
             ->limit(50)
-            ->get()
-            ->map(fn($l) => [
-                'id'                => $l->id,
-                'userID'            => $l->user_id,
-                'emp_first_name'    => $l->user ? $l->user->emp_first_name : '',
-                'emp_last_name'     => $l->user ? $l->user->emp_last_name : '',
-                'emp_code'          => $l->user ? $l->user->emp_code : '',
-                'emp_photo'         => $l->user ? $l->user->emp_photo : '',
-                'emp_department'    => $l->user ? $l->user->emp_department : '',
-                'name'              => $l->user ? trim($l->user->emp_first_name . ' ' . $l->user->emp_last_name) : '',
-                'points'            => $l->points,
-                'total_points'      => $l->points,
-                'completed_courses' => \App\Models\CourseLearner::where('learner_id', $l->user_id)->where('completed', 1)->count(),
-                'empClient'         => $l->emp_client,
-            ]);
-        return $this->out($board, 1, 'OK');
+            ->get();
+
+        // Batch-load completed course counts for all user IDs in one query
+        $userIds = $board->pluck('user_id')->filter()->unique()->values();
+        $completedCounts = CourseLearner::whereIn('learner_id', $userIds)
+            ->where('completed', 1)
+            ->selectRaw('learner_id, COUNT(*) as cnt')
+            ->groupBy('learner_id')
+            ->pluck('cnt', 'learner_id');
+
+        $result = $board->map(fn($l) => [
+            'id'                => $l->id,
+            'userID'            => $l->user_id,
+            'emp_first_name'    => $l->user?->emp_first_name ?? '',
+            'emp_last_name'     => $l->user?->emp_last_name  ?? '',
+            'emp_code'          => $l->user?->emp_code       ?? '',
+            'emp_photo'         => $l->user?->emp_photo      ?? '',
+            'emp_department'    => $l->user?->emp_department ?? '',
+            'name'              => $l->user ? trim($l->user->emp_first_name . ' ' . $l->user->emp_last_name) : '',
+            'points'            => $l->points,
+            'total_points'      => $l->points,
+            'completed_courses' => $completedCounts[$l->user_id] ?? 0,
+            'empClient'         => $l->emp_client,
+        ]);
+
+        return $this->out($result, 1, 'OK');
     }
 
     // =========================================================================
@@ -1017,33 +1070,16 @@ public function getDepartmentLeaderboard(Request $request)
         ->limit(20)
         ->get();
 
-    try {
-        $serverName = env('ECR_SQLSRV_HOST', 'tcp:172.16.1.30,1433');
-        $config = [
-            'Database'               => env('ECR_SQLSRV_DB', 'ECR_New'),
-            'Uid'                    => env('ECR_SQLSRV_USER', 'nbg_sa'),
-            'PWD'                    => env('ECR_SQLSRV_PASS', ''),
-            'TrustServerCertificate' => true,
-            'LoginTimeout'           => 5,
-        ];
-        $conn = @sqlsrv_connect($serverName, $config);
-        if ($conn) {
-            $sql  = 'SELECT ID, DeptName FROM [ECR_New].[dbo].[Department]';
-            $stmt = sqlsrv_query($conn, $sql);
-            $deptMap = [];
-            if ($stmt) {
-                while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
-                    $deptMap[(string)$row['ID']] = $row['DeptName'];
-                }
-            }
-            sqlsrv_close($conn);
-            $data = $data->map(function ($d) use ($deptMap) {
-                $d->dept_name = $deptMap[(string)$d->emp_department] ?? 'Dept ' . $d->emp_department;
-                return $d;
-            });
-        }
-    } catch (\Throwable $e) {
-        // ECR unreachable — fallback to Dept ID
+    // Resolve department names from ECR via EcrService (no env() calls)
+    $ecr     = new EcrService();
+    $deptMap = $ecr->getAllDepartments();
+    $ecr->close();
+
+    if (!empty($deptMap)) {
+        $data = $data->map(function ($d) use ($deptMap) {
+            $d->dept_name = $deptMap[(string)$d->emp_department] ?? 'Dept ' . $d->emp_department;
+            return $d;
+        });
     }
 
     return $this->out($data, 1, 'OK');

@@ -12,6 +12,7 @@ use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use App\Services\EcrService;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
@@ -545,10 +546,10 @@ class ReportController extends Controller
 
         $ecrData = collect();
         try {
-            $serverName   = env('ECR_SQLSRV_HOST', 'tcp:172.16.1.30,1433');
+            $serverName   = config('services.ecr.host');
             $sqlSrvConfig = [
-                'Database' => env('ECR_SQLSRV_DB', 'ECR_New'), 'Uid' => env('ECR_SQLSRV_USER', 'nbg_sa'),
-                'PWD' => env('ECR_SQLSRV_PASS', ''), 'Encrypt' => 0, 'TrustServerCertificate' => 1,
+                'Database' => config('services.ecr.database'), 'Uid' => config('services.ecr.username'),
+                'PWD' => config('services.ecr.password'), 'Encrypt' => 0, 'TrustServerCertificate' => 1,
             ];
             $conn = sqlsrv_connect($serverName, $sqlSrvConfig);
             if ($conn !== false) {
@@ -999,8 +1000,8 @@ class ReportController extends Controller
         $result = ['companies' => [], 'departments' => [], 'verticals' => [], 'source' => 'ecr'];
 
         try {
-            $serverName = env('ECR_SQLSRV_HOST', 'tcp:172.16.1.30,1433');
-            $config     = ['Database' => env('ECR_SQLSRV_DB', 'ECR_New'), 'Uid' => env('ECR_SQLSRV_USER', 'nbg_sa'), 'PWD' => env('ECR_SQLSRV_PASS', ''), 'Encrypt' => 0, 'TrustServerCertificate' => 1];
+            $serverName = config('services.ecr.host');
+            $config     = ['Database' => config('services.ecr.database'), 'Uid' => config('services.ecr.username'), 'PWD' => config('services.ecr.password'), 'Encrypt' => 0, 'TrustServerCertificate' => 1];
             $conn       = sqlsrv_connect($serverName, $config);
             if ($conn === false) return $this->out($result, 0, 'ECR server unreachable.');
 
