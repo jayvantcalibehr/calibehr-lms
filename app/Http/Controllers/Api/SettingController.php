@@ -17,14 +17,6 @@ class SettingController extends Controller
         return response()->json(['data' => $data, 'code' => $code, 'message' => $msg]);
     }
 
-    /**
-     * GET /api/Webservices/getAllUserList
-     *
-     * Optimised for ~1.5 lakh users:
-     *   - Server-side pagination, search, filter
-     *   - Eager-load roles in 1 query (no N+1)
-     *   - 5-min cached aggregate stats
-     */
     public function getAllUserList(Request $request)
     {
         $q = trim((string) $request->input('q', ''));
@@ -76,7 +68,6 @@ class SettingController extends Controller
                 ->each(function ($group, $uid) use (&$rolesByUser) {
                     $rolesByUser[$uid] = $group->pluck('role_id')
                         ->map(fn ($r) => (int) $r)->values()->all();
-
                 });
         }
 
@@ -88,7 +79,6 @@ class SettingController extends Controller
                 ($u->emp_last_name ?? '')
             );
             $arr['roles'] = $rolesByUser[$u->id] ?? [];
-
             return $arr;
         });
 
@@ -113,28 +103,20 @@ class SettingController extends Controller
         ], 1, 'OK');
     }
 
-    /** GET /api/Webservices/getUserDetailList?userID=123 */
     public function getUserDetail(Request $request)
     {
         $request->validate(['userID' => 'required|integer']);
         $user = User::findOrFail($request->userID);
         $roles = UserRole::where('user_id', $user->id)->pluck('role_id');
-
         return $this->out(array_merge($user->toArray(), ['roles' => $roles]), 1, 'OK');
     }
 
-    /** GET /api/Webservices/getAllRoles */
     public function getAllRoles(Request $request)
     {
         $roles = RoleMaster::where('status', 1)->get();
-
         return $this->out($roles, 1, 'OK');
     }
 
-    /**
-     * POST /api/Webservices/setAdminRoles
-     * Body: { "userID": 123, "roles": [1, 2] }
-     */
     public function setAdminRoles(Request $request)
     {
         $request->validate([
@@ -156,146 +138,100 @@ class SettingController extends Controller
         }
 
         Cache::forget('lms.user.stats');
-
         return $this->out(null, 1, 'Roles updated.');
     }
-
-    /* ═══════════════════════════════════════════════════════════════
-       REPORTS FILTERS — ECR-backed multi-select source
-       ───────────────────────────────────────────────────────────────
-       OLD (matrix) report logic:
-         1. Take all LMS users' emp_code values
-         2. JOIN against ECR.Employee_Master ON EmployeeCode = emp_code
-         3. JOIN with Company / Department / Division / Branch tables
-         4. Return DISTINCT names — these are what filters should show
-
-       Cached for 30 min (master data rarely changes).
-       Falls back to empty array if ECR is unreachable.
-       ═══════════════════════════════════════════════════════════════ */
 
     /** GET /api/Webservices/getCompanyList */
     public function getCompanyList(Request $request)
     {
-        return $this->out(
-            $this->getEcrFilterValues('company'),
-            1, 'OK'
-        );
+        return $this->out($this->getEcrFilterValues('company'), 1, 'OK');
     }
 
     /** GET /api/Webservices/getDepartmentList */
     public function getDepartmentList(Request $request)
     {
-        return $this->out(
-            $this->getEcrFilterValues('department'),
-            1, 'OK'
-        );
+        return $this->out($this->getEcrFilterValues('department'), 1, 'OK');
     }
 
     /** GET /api/Webservices/getVerticalList */
     public function getVerticalList(Request $request)
     {
-        return $this->out(
-            $this->getEcrFilterValues('vertical'),
-            1, 'OK'
-        );
+        return $this->out($this->getEcrFilterValues('vertical'), 1, 'OK');
     }
 
     /** GET /api/Webservices/getBranchList */
     public function getBranchList(Request $request)
     {
-        return $this->out(
-            $this->getEcrFilterValues('branch'),
-            1, 'OK'
-        );
+        return $this->out($this->getEcrFilterValues('branch'), 1, 'OK');
     }
 
     /**
-     * Single helper to get distinct ECR filter values.
-     *
-     * Returns: [ { name: "Calibehr Business Support Services Pvt. Ltd" }, ... ]
-     * The `name` IS the value — both display and filter key are the same string,
-     * because that's how the OLD matrix report stores it (no IDs are used).
+     * FIX: Removed emp_codes IN clause — was causing timeout with 1.29 lakh codes.
+     * Now fetches directly from ECR master tables — much faster.
+     * Cached for 30 min.
      */
     private function getEcrFilterValues(string $type): array
     {
         $cacheKey = "lms.filter.$type";
 
         return Cache::remember($cacheKey, 1800, function () use ($type) {
-            // 1. Collect all LMS user emp_codes
-            $empCodes = DB::table('users')
-                ->where('emp_status', 'A')
-                ->whereNotNull('emp_code')
-                ->where('emp_code', '!=', '')
-                ->pluck('emp_code')
-                ->filter()
-                ->unique()
-                ->values()
-                ->all();
 
-            if (empty($empCodes) || ! function_exists('sqlsrv_connect')) {
+            if (! function_exists('sqlsrv_connect')) {
                 return [];
             }
 
-            // 2. Build ECR query based on type
             $sqlMap = [
-                'company' => 'SELECT DISTINCT C.CompanyName  AS name FROM [ECR_New].[dbo].[Employee_Master] EM
-                                 LEFT JOIN [ECR_New].[dbo].[Company]    C ON EM.CompanyId    = C.ID
-                                 WHERE C.CompanyName  IS NOT NULL AND EM.EmployeeCode IN (%s)
-                                 ORDER BY C.CompanyName',
-                'department' => 'SELECT DISTINCT DP.DeptName    AS name FROM [ECR_New].[dbo].[Employee_Master] EM
-                                 LEFT JOIN [ECR_New].[dbo].[Department] DP ON EM.DepartmentId = DP.ID
-                                 WHERE DP.DeptName    IS NOT NULL AND EM.EmployeeCode IN (%s)
+                'company' => 'SELECT DISTINCT C.CompanyName AS name
+                              FROM [ECR_New].[dbo].[Company] C
+                              WHERE C.CompanyName IS NOT NULL AND C.CompanyName != \'\'
+                              ORDER BY C.CompanyName',
+
+                'department' => 'SELECT DISTINCT DP.DeptName AS name
+                                 FROM [ECR_New].[dbo].[Department] DP
+                                 WHERE DP.DeptName IS NOT NULL AND DP.DeptName != \'\'
                                  ORDER BY DP.DeptName',
-                'vertical' => 'SELECT DISTINCT D.DivisionName AS name FROM [ECR_New].[dbo].[Employee_Master] EM
-                                 LEFT JOIN [ECR_New].[dbo].[Division]   D  ON EM.DivisionId   = D.ID
-                                 WHERE D.DivisionName IS NOT NULL AND EM.EmployeeCode IN (%s)
-                                 ORDER BY D.DivisionName',
-                'branch' => 'SELECT DISTINCT B.BranchName   AS name FROM [ECR_New].[dbo].[Employee_Master] EM
-                                 LEFT JOIN [ECR_New].[dbo].[Branch]     B  ON EM.BranchId     = B.ID
-                                 WHERE B.BranchName   IS NOT NULL AND EM.EmployeeCode IN (%s)
-                                 ORDER BY B.BranchName',
+
+                'vertical' => 'SELECT DISTINCT D.DivisionName AS name
+                               FROM [ECR_New].[dbo].[Division] D
+                               WHERE D.DivisionName IS NOT NULL AND D.DivisionName != \'\'
+                               ORDER BY D.DivisionName',
+
+                'branch' => 'SELECT DISTINCT B.BranchName AS name
+                             FROM [ECR_New].[dbo].[Branch] B
+                             WHERE B.BranchName IS NOT NULL AND B.BranchName != \'\'
+                             ORDER BY B.BranchName',
             ];
+
             if (! isset($sqlMap[$type])) {
                 return [];
             }
 
-            // 3. Connect to ECR
-            $serverName = env('ECR_SQLSRV_HOST', 'tcp:172.16.1.30,1433');
-            $config = [
-                'Database' => env('ECR_SQLSRV_DB', 'ECR_New'),
-                'Uid' => env('ECR_SQLSRV_USER', 'nbg_sa'),
-                'PWD' => env('ECR_SQLSRV_PASS', ''),
-                'TrustServerCertificate' => true,
-                'LoginTimeout' => 5,
-            ];
-
-            $results = [];
             try {
+                $serverName = config('services.ecr.host');
+                $config = [
+                    'Database'               => config('services.ecr.database'),
+                    'Uid'                    => config('services.ecr.username'),
+                    'PWD'                    => config('services.ecr.password'),
+                    'TrustServerCertificate' => true,
+                    'LoginTimeout'           => 5,
+                ];
+
                 $conn = @sqlsrv_connect($serverName, $config);
                 if (! $conn) {
                     return [];
                 }
 
-                // Chunk emp_codes (SQL Server has a parameter limit)
-                $chunks = array_chunk($empCodes, 1000);
+                $stmt = sqlsrv_query($conn, $sqlMap[$type]);
+                if (! $stmt) {
+                    sqlsrv_close($conn);
+                    return [];
+                }
+
                 $names = [];
-
-                foreach ($chunks as $chunk) {
-                    // Quote each emp_code safely
-                    $quoted = array_map(fn ($code) => "'".str_replace("'", "''", $code)."'", $chunk);
-                    $inList = implode(',', $quoted);
-
-                    $sql = sprintf($sqlMap[$type], $inList);
-                    $stmt = sqlsrv_query($conn, $sql);
-                    if (! $stmt) {
-                        continue;
-                    }
-
-                    while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
-                        $name = trim($row['name'] ?? '');
-                        if ($name !== '') {
-                            $names[$name] = true;
-                        }
+                while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+                    $name = trim($row['name'] ?? '');
+                    if ($name !== '') {
+                        $names[$name] = true;
                     }
                 }
                 sqlsrv_close($conn);
@@ -303,29 +239,29 @@ class SettingController extends Controller
                 $results = array_keys($names);
                 sort($results, SORT_NATURAL | SORT_FLAG_CASE);
 
-                // Output shape: [{ id, name }] — id is name itself for backward compat
                 return array_map(fn ($n) => ['id' => $n, 'name' => $n], $results);
+
             } catch (\Throwable $e) {
                 return [];
             }
         });
     }
-    /** POST /api/Webservices/toggleUserStatus */
-public function toggleUserStatus(Request $request)
-{
-    $request->validate(['userID' => 'required|integer']);
-    $user = User::findOrFail($request->userID);
-    $currentId = auth('sanctum')->id();
-    if ($user->id === $currentId) {
-        return $this->out(null, 0, 'You cannot disable your own account.');
+
+    public function toggleUserStatus(Request $request)
+    {
+        $request->validate(['userID' => 'required|integer']);
+        $user = User::findOrFail($request->userID);
+        $currentId = auth('sanctum')->id();
+        if ($user->id === $currentId) {
+            return $this->out(null, 0, 'You cannot disable your own account.');
+        }
+        $isActive = $user->emp_active === 'A' && $user->emp_status === 'A';
+        if ($isActive) {
+            $user->emp_active = 'I'; $user->emp_status = 'I'; $user->save();
+            return $this->out(['status' => 'inactive'], 1, 'User disabled successfully.');
+        } else {
+            $user->emp_active = 'A'; $user->emp_status = 'A'; $user->save();
+            return $this->out(['status' => 'active'], 1, 'User enabled successfully.');
+        }
     }
-    $isActive = $user->emp_active === 'A' && $user->emp_status === 'A';
-    if ($isActive) {
-        $user->emp_active = 'I'; $user->emp_status = 'I'; $user->save();
-        return $this->out(['status' => 'inactive'], 1, 'User disabled successfully.');
-    } else {
-        $user->emp_active = 'A'; $user->emp_status = 'A'; $user->save();
-        return $this->out(['status' => 'active'], 1, 'User enabled successfully.');
-    }
-}
 }
