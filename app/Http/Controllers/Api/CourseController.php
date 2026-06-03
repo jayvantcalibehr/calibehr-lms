@@ -614,6 +614,35 @@ public function getCourseList(Request $request)
     }
 
     /** POST /api/courses/test-submit */
+    public function getTopicAttempts(Request $request)
+{
+    $request->validate([
+        'topicID'  => 'required|integer',
+        'courseID' => 'required|integer',
+    ]);
+    $uid = $this->userId($request);
+
+    $attempts = DB::table('topic_question_answers')
+        ->where('topic_id',   $request->topicID)
+        ->where('course_id',  $request->courseID)
+        ->where('answered_by', $uid)
+        ->orderByDesc('answered_on')
+        ->get(['id', 'percentage', 'correct_answers', 'total_questions', 'answered_on']);
+
+    $topic      = CourseTopic::find($request->topicID);
+    $passingPct = $topic ? (int) $topic->passing_percentage : 75;
+
+    $result = $attempts->map(fn($a) => [
+        'id'             => $a->id,
+        'percentage'     => round($a->percentage, 1),
+        'correctAnswers' => $a->correct_answers,
+        'totalQuestions' => $a->total_questions,
+        'passed'         => $a->percentage >= $passingPct,
+        'answeredOn'     => $a->answered_on,
+    ]);
+
+    return $this->out($result, 1, 'OK');
+}
     public function testSubmit(Request $request)
     {
         $request->validate([

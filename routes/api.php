@@ -173,6 +173,7 @@ Route::middleware(['auth:sanctum', CheckLmsAuth::class])->group(function () {
         // Added: 24-Apr-2026 — aligns frontend CourseDetail.jsx endpoints
         Route::post('addCourseFeedback',           [CourseController::class, 'addFeedback']);
         Route::get('getCourseTopicQuestions',      [CourseController::class, 'getTestQuestions']);
+        Route::get('getTopicAttempts',               [CourseController::class, 'getTopicAttempts']);
         Route::get('getCourseTopicResourceLinks',  [CourseController::class, 'getResourceList']);
         Route::post('submitTopicTest',             [CourseController::class, 'testSubmit']);
         Route::post('updateTopicStatus',           [CourseController::class, 'markAsComplete']);
