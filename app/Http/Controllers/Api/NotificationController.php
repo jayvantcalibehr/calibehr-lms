@@ -187,7 +187,7 @@ class NotificationController extends Controller
     {
         try {
             $response = Http::withHeaders([
-                'Authorization' => 'key=' . env('FCM_SERVER_KEY'),
+                'Authorization' => 'key=' . config('services.fcm.server_key'),
                 'Content-Type'  => 'application/json',
             ])->post('https://fcm.googleapis.com/fcm/send', [
                 'to'           => $token,
@@ -215,7 +215,7 @@ class NotificationController extends Controller
     {
         try {
             $response = Http::withHeaders([
-                'Authorization' => 'key=' . env('FCM_SERVER_KEY'),
+                'Authorization' => 'key=' . config('services.fcm.server_key'),
                 'Content-Type'  => 'application/json',
             ])->post('https://fcm.googleapis.com/fcm/send', [
                 'registration_ids' => $tokens,

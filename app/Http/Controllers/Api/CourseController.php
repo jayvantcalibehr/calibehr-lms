@@ -496,10 +496,9 @@ public function getCourseList(Request $request)
             )
             ->where('a.topic_id', $request->topicID)
             ->groupBy('a.answered_by')
-            ->havingRaw('SUM(CASE WHEN a.percentage < ? THEN 1 ELSE 0 END) >= ? AND MAX(a.percentage) < ?', [
+  ->havingRaw('SUM(CASE WHEN a.percentage < ? THEN 1 ELSE 0 END) >= ?', [
                 $topic->passing_percentage,
                 $topic->number_of_attempt,
-                $topic->passing_percentage,
             ])
             ->get();
 
@@ -614,7 +613,7 @@ public function getCourseList(Request $request)
     }
 
     /** POST /api/courses/test-submit */
-    public function getTopicAttempts(Request $request)
+public function getTopicAttempts(Request $request)
 {
     $request->validate([
         'topicID'  => 'required|integer',
@@ -629,8 +628,15 @@ public function getCourseList(Request $request)
         ->orderByDesc('answered_on')
         ->get(['id', 'percentage', 'correct_answers', 'total_questions', 'answered_on']);
 
-    $topic      = CourseTopic::find($request->topicID);
-    $passingPct = $topic ? (int) $topic->passing_percentage : 75;
+    $topic         = CourseTopic::find($request->topicID);
+    $passingPct    = $topic ? (int) $topic->passing_percentage : 75;
+    $attemptLimit  = $topic ? (int) $topic->number_of_attempt : 0;
+
+    $isUnlocked = $attemptLimit > 0 ? DB::table('topic_attempt_unlocks')
+        ->where('topic_id', $request->topicID)
+        ->where('user_id',  $uid)
+        ->where('used', 0)
+        ->exists() : false;
 
     $result = $attempts->map(fn($a) => [
         'id'             => $a->id,
@@ -641,7 +647,16 @@ public function getCourseList(Request $request)
         'answeredOn'     => $a->answered_on,
     ]);
 
-    return $this->out($result, 1, 'OK');
+    $failedCount = $result->filter(fn($a) => !$a['passed'])->count();
+    $isLocked = $attemptLimit > 0 && $failedCount >= $attemptLimit && !$isUnlocked;
+
+    return $this->out([
+        'attempts'      => $result,
+        'isLocked'      => $isLocked,
+        'isUnlocked'    => $isUnlocked,
+        'attemptLimit'  => $attemptLimit,
+        'failedCount'   => $failedCount,
+    ], 1, 'OK');
 }
     public function testSubmit(Request $request)
     {
