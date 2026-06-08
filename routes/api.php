@@ -91,8 +91,7 @@ Route::middleware(['auth:sanctum', CheckLmsAuth::class])->group(function () {
         Route::post('disableCourse', [CourseController::class, 'disableCourse']);
         Route::post('visibilityStatus', [CourseController::class, 'visibilityStatus']);
         Route::get('getCatalogCourseList', [CourseController::class, 'getCatalogCourseList']);
-        Route::get('getAllCoursesList', [CourseController::class, 'getCourseList']);
-        Route::get('getCoursesList', [CourseController::class, 'getCourseList']);
+        Route::get('getAllCoursesList', [CourseController::class, 'getCourseList']);Route::get('getCoursesList', [CourseController::class, 'getCourseList']);
 
         // Featured
         Route::post('addToFeaturedCourse', [CourseController::class, 'addToFeatured']);
