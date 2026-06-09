@@ -28,6 +28,7 @@ use Illuminate\Support\Facades\Route;
 // Rate limited: 10 attempts per minute per IP (brute-force protection).
 // login() / loginWS() removed — dead code, used md5. LDAP only.
 // ============================================================
+Route::get('underMaintenance', [CourseController::class, 'underMaintenance']);
 Route::middleware('throttle:10,1')->prefix('auth')->group(function () {
     Route::post('loginLdap',    [AuthController::class, 'loginLdap']);
     Route::post('loginLdapWeb', [AuthController::class, 'loginLdap']); // mobile alias
@@ -81,6 +82,7 @@ Route::middleware(['auth:sanctum', CheckLmsAuth::class])->group(function () {
         Route::post('enableCategory', [CourseController::class, 'enableCategory']);
         Route::get('getCategoryDetails', [CourseController::class, 'getCategoryDetails']);
         Route::get('cc', [CourseController::class, 'getCategories']);  // alias
+        Route::get('getCourseCategory', [CourseController::class, 'getCategories']);
 
         // --- Courses ---
         Route::post('addCourse', [CourseController::class, 'addCourse']);

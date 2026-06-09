@@ -78,7 +78,8 @@ class SettingController extends Controller
                 ($u->emp_middle_name ?? '').' '.
                 ($u->emp_last_name ?? '')
             );
-            $arr['roles'] = $rolesByUser[$u->id] ?? [];
+            $arr['roles'] = $rolesByUser[(string) $u->id] ?? [];
+
             return $arr;
         });
 

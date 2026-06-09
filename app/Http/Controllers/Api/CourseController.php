@@ -1810,4 +1810,12 @@ public function getDepartmentLeaderboard(Request $request)
         );
         return $this->out(null, 1, 'Token registered.');
     }
+    public function underMaintenance()
+{
+    return response()->json([
+        'data'    => ['maintenance' => false],
+        'code'    => 1,
+        'message' => 'OK'
+    ]);
+}
 }
